@@ -3,6 +3,7 @@ from urllib.parse import urlencode
 from os import remove, path
 from api_errors import *
 import subprocess
+import socket
 import time
 import json
 import sys
@@ -75,16 +76,23 @@ class Api:
 
         raise ERR_CODES.get(res['error']['error_code'], 1)(res)
 
-    def method(self, method, **kwargs):
+    def method(self, method, repeats=2, **kwargs):
         self.check_expiration()
 
         kwargs.setdefault('access_token', self.token_info['access_token'])
         kwargs.setdefault('user_id', self.token_info['user_id'])
-        params = urlencode(kwargs)
+        params = '&'.join('%s=%s' % (k,v) for k, v in kwargs.items())
 
+        res = {}
         url = API_URL % (method, params)
-        with urlopen(url) as p:
-            res = json.loads(p.readall().decode())
-        
+        for _ in range(repeats):
+            try:
+                with urlopen(url) as p:
+                    res = json.loads(p.readall().decode())
+            except socket.error as e:
+                time.sleep(1)
+            else:
+                break
+
         self.check_error(res)
-        return res['response']
+        return res.get('response')
